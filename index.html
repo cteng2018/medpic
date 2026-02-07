@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Medical Photo Organizer</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    #root {
+      width: 100%;
+      height: 100vh;
+    }
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .shimmer {
+      animation: shimmer 2s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: -1000px 0; }
+      100% { background-position: 1000px 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Lucide React Icons (inline SVG components)
+    const Search = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+      </svg>
+    );
+
+    const X = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path d="M18 6 6 18M6 6l12 12"></path>
+      </svg>
+    );
+
+    const Camera = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+        <circle cx="12" cy="13" r="4"></circle>
+      </svg>
+    );
+
+    const Grid3x3 = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <rect width="7" height="7" x="3" y="3" rx="1"></rect>
+        <rect width="7" height="7" x="14" y="3" rx="1"></rect>
+        <rect width="7" height="7" x="14" y="14" rx="1"></rect>
+        <rect width="7" height="7" x="3" y="14" rx="1"></rect>
+      </svg>
+    );
+
+    const ChevronLeft = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path d="m15 18-6-6 6-6"></path>
+      </svg>
+    );
+
+    const Plus = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path d="M5 12h14M12 5v14"></path>
+      </svg>
+    );
+
+    const Trash2 = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+        <line x1="10" x2="10" y1="11" y2="17"></line>
+        <line x1="14" x2="14" y1="11" y2="17"></line>
+      </svg>
+    );
+
+    const Play = ({ className }) => (
+      <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" fill="white" opacity="0.9"></circle>
+        <path d="M10 8.64L15.27 12 10 15.36V8.64z" fill="black"></path>
+      </svg>
+    );
+
+    const MedicalPhotoOrganizer = () => {
+      const [photos, setPhotos] = useState([]);
+      const [searchQuery, setSearchQuery] = useState('');
+      const [selectedCategory, setSelectedCategory] = useState('all');
+      const [selectedPhoto, setSelectedPhoto] = useState(null);
+      const [showCameraView, setShowCameraView] = useState(false);
+      const [showDetailsForm, setShowDetailsForm] = useState(false);
+      const [currentView, setCurrentView] = useState('grid');
+      const [capturedImage, setCapturedImage] = useState(null);
+      const [newPhoto, setNewPhoto] = useState({
+        patientId: '',
+        patientName: '',
+        category: '',
+        tags: [],
+        notes: '',
+        date: new Date().toISOString().split('T')[0],
+        imageUrl: '',
+        mediaType: 'photo' // 'photo' or 'video'
+      });
+      const [tagInput, setTagInput] = useState('');
+      const cameraInputRef = useRef(null);
+
+      const categories = [
+        { id: 'all', name: 'All Media', color: 'bg-gradient-to-r from-purple-500 to-pink-500' },
+        { id: 'consult', name: 'Consult', color: 'bg-gradient-to-r from-blue-500 to-cyan-500' },
+        { id: 'surgery', name: 'Surgery', color: 'bg-gradient-to-r from-red-500 to-orange-500' },
+        { id: 'clinic', name: 'Clinic', color: 'bg-gradient-to-r from-green-500 to-emerald-500' }
+      ];
+
+      // Load photos from localStorage on mount
+      useEffect(() => {
+        const savedPhotos = localStorage.getItem('medical-photos');
+        if (savedPhotos) {
+          try {
+            setPhotos(JSON.parse(savedPhotos));
+          } catch (error) {
+            console.log('Error loading photos');
+          }
+        }
+      }, []);
+
+      // Save photos to localStorage whenever they change
+      useEffect(() => {
+        if (photos.length > 0) {
+          localStorage.setItem('medical-photos', JSON.stringify(photos));
+        }
+      }, [photos]);
+
+      const handleCameraCapture = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const isVideo = file.type.startsWith('video/');
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setCapturedImage(reader.result);
+            setNewPhoto({ ...newPhoto, imageUrl: reader.result, mediaType: isVideo ? 'video' : 'photo' });
+            setShowCameraView(false);
+            setShowDetailsForm(true);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+
+      const openCamera = () => {
+        setShowCameraView(true);
+        setTimeout(() => {
+          if (cameraInputRef.current) {
+            cameraInputRef.current.click();
+          }
+        }, 100);
+      };
+
+      const retakePhoto = () => {
+        setCapturedImage(null);
+        setNewPhoto({ ...newPhoto, imageUrl: '', mediaType: 'photo' });
+        setShowDetailsForm(false);
+        openCamera();
+      };
+
+      const addTag = () => {
+        if (tagInput.trim() && !newPhoto.tags.includes(tagInput.trim())) {
+          setNewPhoto({
+            ...newPhoto,
+            tags: [...newPhoto.tags, tagInput.trim().toLowerCase()]
+          });
+          setTagInput('');
+        }
+      };
+
+      const removeTag = (tagToRemove) => {
+        setNewPhoto({
+          ...newPhoto,
+          tags: newPhoto.tags.filter(tag => tag !== tagToRemove)
+        });
+      };
+
+      const savePhoto = () => {
+        if (newPhoto.imageUrl && newPhoto.patientId && newPhoto.category) {
+          const photoToSave = {
+            ...newPhoto,
+            id: Date.now(),
+            uploadDate: new Date().toISOString()
+          };
+          setPhotos([photoToSave, ...photos]);
+          setShowDetailsForm(false);
+          setCapturedImage(null);
+          setNewPhoto({
+            patientId: '',
+            patientName: '',
+            category: '',
+            tags: [],
+            notes: '',
+            date: new Date().toISOString().split('T')[0],
+            imageUrl: '',
+            mediaType: 'photo'
+          });
+        }
+      };
+
+      const deletePhoto = (photoId) => {
+        setPhotos(photos.filter(p => p.id !== photoId));
+        setSelectedPhoto(null);
+        localStorage.setItem('medical-photos', JSON.stringify(photos.filter(p => p.id !== photoId)));
+      };
+
+      const filteredPhotos = photos.filter(photo => {
+        const matchesCategory = selectedCategory === 'all' || photo.category === selectedCategory;
+        const matchesSearch = searchQuery === '' || 
+          photo.patientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          photo.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          photo.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          photo.notes.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesCategory && matchesSearch;
+      });
+
+      const getCategoryInfo = (categoryId) => {
+        return categories.find(cat => cat.id === categoryId) || categories[categories.length - 1];
+      };
+
+      return (
+        <div className="h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 overflow-hidden flex flex-col">
+          {/* iPhone Status Bar */}
+          <div className="bg-black bg-opacity-30 text-white px-6 pt-3 pb-2 flex items-center justify-between text-xs backdrop-blur-md">
+            <span className="font-semibold">9:41</span>
+            <div className="flex items-center gap-1">
+              <div className="w-4 h-3 border border-white rounded-sm"></div>
+              <div className="w-1 h-1.5 bg-white rounded-full"></div>
+            </div>
+          </div>
+
+          {/* Camera View */}
+          {showCameraView && (
+            <div className="fixed inset-0 bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 z-50 flex flex-col">
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <Camera className="w-24 h-24 text-white opacity-70 mb-4" />
+                <p className="text-white text-lg font-medium">Choose Photo or Video</p>
+                <p className="text-white text-sm opacity-75 mt-2">Supports images and video files</p>
+              </div>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*,video/*"
+                onChange={handleCameraCapture}
+                className="hidden"
+              />
+              <div className="p-6">
+                <button
+                  onClick={() => setShowCameraView(false)}
+                  className="w-full bg-white text-purple-600 py-4 rounded-2xl font-bold text-lg shadow-2xl hover:bg-gray-100 transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Details Form */}
+          {showDetailsForm && (
+            <div className="fixed inset-0 bg-white z-50 flex flex-col">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-4 flex items-center justify-between shadow-lg">
+                <button
+                  onClick={() => {
+                    setShowDetailsForm(false);
+                    setCapturedImage(null);
+                    setNewPhoto({ ...newPhoto, imageUrl: '', mediaType: 'photo' });
+                  }}
+                  className="text-white text-lg font-medium"
+                >
+                  Cancel
+                </button>
+                <h1 className="text-xl font-bold">Add Details</h1>
+                <button
+                  onClick={savePhoto}
+                  disabled={!newPhoto.imageUrl || !newPhoto.patientId || !newPhoto.category}
+                  className="text-white text-lg font-bold disabled:opacity-40"
+                >
+                  Save
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto bg-gray-50">
+                {/* Photo/Video Preview */}
+                <div className="relative aspect-square bg-gradient-to-br from-gray-900 to-gray-800">
+                  {newPhoto.mediaType === 'video' ? (
+                    <video
+                      src={newPhoto.imageUrl}
+                      controls
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <img
+                      src={newPhoto.imageUrl}
+                      alt="Captured"
+                      className="w-full h-full object-contain"
+                    />
+                  )}
+                  <button
+                    onClick={retakePhoto}
+                    className="absolute bottom-4 right-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-full text-sm font-bold shadow-xl hover:shadow-2xl transition-all"
+                  >
+                    Retake
+                  </button>
+                </div>
+
+                {/* Form */}
+                <div className="p-5 space-y-4">
+                  <div className="bg-white rounded-2xl p-5 shadow-lg">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">Patient ID *</label>
+                    <input
+                      type="text"
+                      value={newPhoto.patientId}
+                      onChange={(e) => setNewPhoto({ ...newPhoto, patientId: e.target.value })}
+                      className="w-full px-4 py-4 bg-gray-50 rounded-xl text-lg border-2 border-transparent focus:border-purple-500 focus:bg-white transition-all"
+                      placeholder="e.g., P12345"
+                    />
+                  </div>
+
+                  <div className="bg-white rounded-2xl p-5 shadow-lg">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">Patient Name</label>
+                    <input
+                      type="text"
+                      value={newPhoto.patientName}
+                      onChange={(e) => setNewPhoto({ ...newPhoto, patientName: e.target.value })}
+                      className="w-full px-4 py-4 bg-gray-50 rounded-xl text-lg border-2 border-transparent focus:border-purple-500 focus:bg-white transition-all"
+                      placeholder="Optional"
+                    />
+                  </div>
+
+                  <div className="bg-white rounded-2xl p-5 shadow-lg">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">Category *</label>
+                    <select
+                      value={newPhoto.category}
+                      onChange={(e) => setNewPhoto({ ...newPhoto, category: e.target.value })}
+                      className="w-full px-4 py-4 bg-gray-50 rounded-xl text-lg border-2 border-transparent focus:border-purple-500 focus:bg-white transition-all"
+                    >
+                      <option value="">Select category</option>
+                      {categories.filter(c => c.id !== 'all').map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="bg-white rounded-2xl p-5 shadow-lg">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">Date</label>
+                    <input
+                      type="date"
+                      value={newPhoto.date}
+                      onChange={(e) => setNewPhoto({ ...newPhoto, date: e.target.value })}
+                      className="w-full px-4 py-4 bg-gray-50 rounded-xl text-lg border-2 border-transparent focus:border-purple-500 focus:bg-white transition-all"
+                    />
+                  </div>
+
+                  <div className="bg-white rounded-2xl p-5 shadow-lg">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">Tags</label>
+                    <div className="flex gap-2 mb-3">
+                      <input
+                        type="text"
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                        className="flex-1 px-4 py-3 bg-gray-50 rounded-xl text-lg border-2 border-transparent focus:border-purple-500 focus:bg-white transition-all"
+                        placeholder="Add tag"
+                      />
+                      <button
+                        onClick={addTag}
+                        className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-5 rounded-xl shadow-lg hover:shadow-xl transition-all"
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {newPhoto.tags.map(tag => (
+                        <span
+                          key={tag}
+                          className="bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 px-4 py-2 rounded-full text-sm flex items-center gap-2 font-medium shadow-sm"
+                        >
+                          {tag}
+                          <button onClick={() => removeTag(tag)} className="hover:text-purple-900">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl p-5 shadow-lg">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">Notes</label>
+                    <textarea
+                      value={newPhoto.notes}
+                      onChange={(e) => setNewPhoto({ ...newPhoto, notes: e.target.value })}
+                      className="w-full px-4 py-4 bg-gray-50 rounded-xl text-lg border-2 border-transparent focus:border-purple-500 focus:bg-white transition-all resize-none"
+                      rows="4"
+                      placeholder="Clinical notes..."
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Photo Detail View */}
+          {selectedPhoto && (
+            <div className="fixed inset-0 bg-gradient-to-br from-gray-900 to-black z-40 flex flex-col">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-4 flex items-center justify-between shadow-lg">
+                <button
+                  onClick={() => setSelectedPhoto(null)}
+                  className="flex items-center gap-2 font-medium"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                  <span>Back</span>
+                </button>
+                <button
+                  onClick={() => deletePhoto(selectedPhoto.id)}
+                  className="text-white hover:text-red-300 transition-colors"
+                >
+                  <Trash2 className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto bg-gradient-to-br from-gray-900 to-black">
+                {/* Photo/Video */}
+                <div className="w-full flex items-center justify-center bg-black">
+                  {selectedPhoto.mediaType === 'video' ? (
+                    <video
+                      src={selectedPhoto.imageUrl}
+                      controls
+                      className="w-full object-contain max-h-[60vh]"
+                    />
+                  ) : (
+                    <img
+                      src={selectedPhoto.imageUrl}
+                      alt={`Patient ${selectedPhoto.patientId}`}
+                      className="w-full object-contain max-h-[60vh]"
+                    />
+                  )}
+                </div>
+
+                {/* Details */}
+                <div className="bg-white rounded-t-3xl p-6 space-y-5 mt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-800">{selectedPhoto.patientName || selectedPhoto.patientId}</h2>
+                      <p className="text-gray-500 font-medium">{selectedPhoto.patientId}</p>
+                    </div>
+                    <div className={`${getCategoryInfo(selectedPhoto.category).color} text-white px-5 py-2 rounded-full text-sm font-bold shadow-lg`}>
+                      {getCategoryInfo(selectedPhoto.category).name}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 py-4">
+                    <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4">
+                      <p className="text-sm text-purple-600 font-semibold">Date</p>
+                      <p className="font-bold text-gray-800">{new Date(selectedPhoto.date).toLocaleDateString()}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4">
+                      <p className="text-sm text-blue-600 font-semibold">Uploaded</p>
+                      <p className="font-bold text-gray-800">{new Date(selectedPhoto.uploadDate).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+
+                  {selectedPhoto.tags.length > 0 && (
+                    <div>
+                      <p className="text-sm text-gray-600 font-bold mb-3">Tags</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedPhoto.tags.map(tag => (
+                          <span key={tag} className="bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 px-4 py-2 rounded-full text-sm font-medium shadow-sm">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedPhoto.notes && (
+                    <div>
+                      <p className="text-sm text-gray-600 font-bold mb-3">Notes</p>
+                      <p className="text-gray-800 bg-gradient-to-br from-gray-50 to-gray-100 p-5 rounded-2xl leading-relaxed shadow-sm">{selectedPhoto.notes}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Main View */}
+          {!showCameraView && !showDetailsForm && !selectedPhoto && (
+            <>
+              {/* Header */}
+              <div className="bg-white bg-opacity-10 backdrop-blur-lg px-5 py-4 border-b border-white border-opacity-20">
+                <h1 className="text-3xl font-black text-white">Medical Media</h1>
+                <p className="text-white text-sm font-medium opacity-90">{photos.length} {photos.length === 1 ? 'item' : 'items'}</p>
+              </div>
+
+              {/* Search Bar */}
+              {currentView === 'search' && (
+                <div className="bg-white bg-opacity-10 backdrop-blur-lg px-5 pb-4">
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white opacity-70 w-5 h-5" />
+                    <input
+                      type="text"
+                      placeholder="Search patients, tags, notes..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-12 pr-4 py-4 bg-white bg-opacity-20 backdrop-blur-md rounded-2xl text-lg text-white placeholder-white placeholder-opacity-70 border-2 border-white border-opacity-20 focus:border-opacity-50 focus:bg-opacity-30 transition-all"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Category Filters */}
+              <div className="bg-white bg-opacity-10 backdrop-blur-lg px-5 pb-4">
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                  {categories.map(category => (
+                    <button
+                      key={category.id}
+                      onClick={() => setSelectedCategory(category.id)}
+                      className={`px-5 py-2.5 rounded-full whitespace-nowrap transition-all font-bold text-sm shadow-lg ${
+                        selectedCategory === category.id
+                          ? `${category.color} text-white scale-105 shadow-xl`
+                          : 'bg-white bg-opacity-20 text-white backdrop-blur-md border border-white border-opacity-30'
+                      }`}
+                    >
+                      {category.name}
+                      {category.id !== 'all' && photos.filter(p => p.category === category.id).length > 0 && (
+                        <span className="ml-2 bg-white bg-opacity-30 px-2 py-0.5 rounded-full text-xs font-bold">
+                          {photos.filter(p => p.category === category.id).length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Photo Grid */}
+              <div className="flex-1 overflow-y-auto">
+                {filteredPhotos.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center px-8">
+                    <div className="bg-white bg-opacity-10 backdrop-blur-lg p-8 rounded-3xl">
+                      <Camera className="w-20 h-20 text-white opacity-70 mb-4 mx-auto" />
+                      <p className="text-white text-xl font-bold mb-2">No media yet</p>
+                      <p className="text-white text-sm opacity-80">Tap the camera button to capture your first photo or video</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 p-2">
+                    {filteredPhotos.map(photo => (
+                      <div
+                        key={photo.id}
+                        onClick={() => setSelectedPhoto(photo)}
+                        className="aspect-square bg-white bg-opacity-10 backdrop-blur-md rounded-2xl overflow-hidden relative shadow-lg hover:scale-105 transition-transform"
+                      >
+                        {photo.mediaType === 'video' ? (
+                          <>
+                            <video
+                              src={photo.imageUrl}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Play className="w-12 h-12 text-white drop-shadow-lg" />
+                            </div>
+                          </>
+                        ) : (
+                          <img
+                            src={photo.imageUrl}
+                            alt={`Patient ${photo.patientId}`}
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                        <div className="absolute top-2 right-2">
+                          <div className={`${getCategoryInfo(photo.category).color} w-3 h-3 rounded-full shadow-lg`}></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom Tab Bar */}
+              <div className="bg-white bg-opacity-10 backdrop-blur-lg border-t border-white border-opacity-20 px-6 py-3 pb-6">
+                <div className="flex items-center justify-around">
+                  <button
+                    onClick={() => setCurrentView('grid')}
+                    className={`flex flex-col items-center gap-1 transition-all ${currentView === 'grid' ? 'text-white scale-110' : 'text-white opacity-60'}`}
+                  >
+                    <Grid3x3 className="w-6 h-6" />
+                    <span className="text-xs font-semibold">Media</span>
+                  </button>
+                  
+                  <button
+                    onClick={openCamera}
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-5 rounded-full -mt-10 shadow-2xl hover:shadow-3xl hover:scale-110 transition-all"
+                  >
+                    <Camera className="w-8 h-8" />
+                  </button>
+                  
+                  <button
+                    onClick={() => setCurrentView('search')}
+                    className={`flex flex-col items-center gap-1 transition-all ${currentView === 'search' ? 'text-white scale-110' : 'text-white opacity-60'}`}
+                  >
+                    <Search className="w-6 h-6" />
+                    <span className="text-xs font-semibold">Search</span>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    };
+
+    ReactDOM.render(<MedicalPhotoOrganizer />, document.getElementById('root'));
+  </script>
+</body>
+</html>
